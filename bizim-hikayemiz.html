@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bizim Hikâyemiz | Fırat & Nur</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  
+  <!-- React & Dependencies -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            cream: '#FAF7F2',
+            warmWhite: '#FFFEF9',
+            softBrown: '#8B7355',
+            lightBrown: '#C4A77D',
+            paleRose: '#E8D5D5',
+            dustyRose: '#D4A5A5',
+            softGray: '#9A9A9A',
+            warmGray: '#6B6B6B',
+            deepWarm: '#5C4B3A',
+          },
+          fontFamily: {
+            serif: ['Cormorant Garamond', 'Georgia', 'serif'],
+            sans: ['DM Sans', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  
+  <style>
+    * { box-sizing: border-box; }
+    
+    body {
+      background: linear-gradient(135deg, #FAF7F2 0%, #F5F0E8 50%, #EDE6DB 100%);
+      min-height: 100vh;
+    }
+    
+    .card-hover {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .card-hover:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px -12px rgba(92, 75, 58, 0.15);
+    }
+    
+    .heatmap-cell {
+      transition: all 0.2s ease;
+    }
+    .heatmap-cell:hover {
+      transform: scale(1.5);
+      z-index: 10;
+    }
+    
+    .word-cloud-word {
+      transition: all 0.3s ease;
+      cursor: default;
+    }
+    .word-cloud-word:hover {
+      transform: scale(1.15);
+      color: #8B7355 !important;
+    }
+    
+    .playback-message {
+      animation: slideUp 0.4s ease-out forwards;
+    }
+    
+    @keyframes slideUp {
+      0% { opacity: 0; transform: translateY(15px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    
+    @keyframes fadeIn {
+      0% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+    
+    @keyframes heartbeat {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15); }
+    }
+    
+    .heartbeat { animation: heartbeat 1.5s ease-in-out infinite; }
+    .fade-in { animation: fadeIn 0.8s ease-out forwards; }
+    
+    .noise-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      opacity: 0.025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    }
+    
+    .timeline-line {
+      background: linear-gradient(to bottom, #C4A77D, #D4A5A5, #E8D5D5);
+    }
+    
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #FAF7F2; }
+    ::-webkit-scrollbar-thumb { background: #C4A77D; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #8B7355; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <div class="noise-overlay"></div>
+  
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+    // ==================== TURKISH STOP WORDS ====================
+    const TURKISH_STOP_WORDS = new Set([
+      've', 'bir', 'bu', 'da', 'de', 'için', 'ile', 'mi', 'mı', 'mu', 'mü',
+      'ne', 'o', 'ya', 'ben', 'sen', 'biz', 'siz', 'onlar', 'şu', 'ki',
+      'ama', 'fakat', 'çünkü', 'eğer', 'gibi', 'kadar', 'daha', 'en',
+      'var', 'yok', 'olan', 'olarak', 'sonra', 'önce', 'şey', 'her',
+      'evet', 'hayır', 'tamam', 'peki', 'iyi', 'güzel', 'oldu', 'olur',
+      'eder', 'etmek', 'yapmak', 'gelmek', 'gitmek', 'demek', 'söylemek',
+      'çok', 'az', 'biraz', 'hep', 'hiç', 'sadece', 'bile', 'artık',
+      'şimdi', 'bugün', 'yarın', 'dün', 'nasıl', 'neden', 'nerede',
+      'kim', 'hangi', 'kaç', 'hm', 'hmm', 'hı', 'hıı', 'aa', 'ee', 'öyle', 'böyle',
+      'la', 'lan', 'yani', 'işte', 'hani', 'aslında', 'gerçekten',
+      'bence', 'sence', 'belki', 'tabi', 'tabii', 'elbette', 'kesinlikle',
+      'canım', 'yaa', 'yahu', 'abi', 'ya', 'yav', 'lan', 'len', 'şey',
+      'dur', 'gel', 'git', 'bak', 'yap', 'al', 'ver', 'kal', 'çık', 'gir',
+      'dedim', 'dedi', 'diyor', 'olsun', 'olmuş', 'yapar', 'ediyor',
+      'değil', 'yok', 'mu', 'mü', 'mısın', 'musun', 'misin',
+    ]);
+
+    // ==================== EASTER EGGS ====================
+    const EASTER_EGGS = {
+      'seni seviyorum': '❤️ "Seni seviyorum" - Bu kelimelerin gücü hiç azalmaz.',
+      'özledim': '🥺 Özlem, mesafenin kalbe yaptığı en güzel eziyettir.',
+      'nur': '✨ Nur - İsminin anlamı gibi, hayata ışık saçan.',
+      'elanur': '👨‍👩‍👧 Elanur - Ailenin en güzel parçası.',
+      'nora': '📚 Nora Kitap Evi - Hikâyelerin buluştuğu yer.',
+      'canım': '💕 "Canım" - En sık kullandığınız kelime. Tesadüf değil.',
+      'karakoyunlu': '🏠 Karakoyunlu Sokak - Hikâyenin başladığı tesadüf.',
+      'fındıkzade': '🌳 Fındıkzade - 30 yıllık hatıralar, yeni bir başlangıç.',
+      'bayram': '🎉 1 Nisan 2025 - Bir bayram mesajıyla başlayan hikâye.',
+      'mutlu': '😊 Mutluluk, paylaştıkça çoğalır.',
+    };
+
+    // ==================== UTILITY FUNCTIONS ====================
+    const normalizeText = (text) => {
+      return text.toLowerCase()
+        .replace(/[.,!?;:'"()\[\]{}…]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+
+    const extractEmojis = (text) => {
+      const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]/gu;
+      return text.match(emojiRegex) || [];
+    };
+
+    const getWordFrequency = (messages) => {
+      const wordCount = {};
+      messages.forEach(msg => {
+        const words = normalizeText(msg.text).split(' ');
+        words.forEach(word => {
+          if (word.length > 2 && !TURKISH_STOP_WORDS.has(word)) {
+            wordCount[word] = (wordCount[word] || 0) + 1;
+          }
+        });
+      });
+      return Object.entries(wordCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 100);
+    };
+
+    const getEmojiFrequency = (messages) => {
+      const emojiCount = {};
+      messages.forEach(msg => {
+        const emojis = extractEmojis(msg.text);
+        emojis.forEach(emoji => {
+          emojiCount[emoji] = (emojiCount[emoji] || 0) + 1;
+        });
+      });
+      return Object.entries(emojiCount).sort((a, b) => b[1] - a[1]);
+    };
+
+    const categorizeSentiment = (text) => {
+      const lowerText = text.toLowerCase();
+      if (/seviyorum|aşk|❤️|💕|💗|😘|🥰|💖|aşkım|özledim|öpüyorum|sarıl/.test(lowerText)) return 'love';
+      if (/😂|🤣|haha|:D|:d|eğlen|komik|güldür|🤪|😁/.test(lowerText)) return 'humor';
+      if (/kız|sinir|üz|ağla|😡|😤|😢|tartış|kavga|kızdım|bıktım/.test(lowerText)) return 'tension';
+      if (/düşün|hayat|anlam|felsefe|neden|nasıl|merak|anlat|hikaye/.test(lowerText)) return 'deep';
+      return 'neutral';
+    };
+
+    const isNightMessage = (time) => {
+      if (!time) return false;
+      const hour = parseInt(time.split(':')[0]);
+      return hour >= 23 || hour < 6;
+    };
+
+    const formatNumber = (num) => num?.toLocaleString('tr-TR') || '0';
+
+    const formatDate = (dateStr) => {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+    };
+
+    const formatDateShort = (dateStr) => {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+    };
+
+    // ==================== WELCOME SCREEN ====================
+    const WelcomeScreen = ({ onStart, loading, error }) => {
+      const [visible, setVisible] = useState(false);
+      
+      useEffect(() => {
+        setTimeout(() => setVisible(true), 100);
+      }, []);
+      
+      return (
+        <div className="fixed inset-0 bg-cream flex items-center justify-center z-50 p-4">
+          <div className={`text-center transition-all duration-1000 max-w-lg ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+            <div className="mb-8">
+              <span className="text-7xl heartbeat">❤️</span>
+            </div>
+            <h1 className="font-serif text-4xl md:text-6xl text-deepWarm mb-4 italic">
+              Nur için hazırlandı
+            </h1>
+            <p className="font-sans text-softGray text-lg mb-2">
+              Bir hikâye var anlatılmayı bekleyen...
+            </p>
+            <p className="font-serif text-lightBrown text-base italic mb-8">
+              41.693 mesajda saklı, her kelimede gizli
+            </p>
+            
+            {loading ? (
+              <div className="text-softBrown">
+                <div className="animate-pulse mb-2">Hikâye yükleniyor...</div>
+                <div className="w-48 h-1 bg-paleRose/50 rounded-full mx-auto overflow-hidden">
+                  <div className="h-full bg-softBrown rounded-full animate-pulse" style={{width: '60%'}}></div>
+                </div>
+              </div>
+            ) : error ? (
+              <div className="text-red-500 mb-4">
+                <p className="mb-2">{error}</p>
+                <p className="text-sm text-softGray">messages.json dosyasını aynı klasöre koyduğunuzdan emin olun.</p>
+              </div>
+            ) : (
+              <button 
+                onClick={onStart}
+                className="font-sans bg-softBrown text-warmWhite px-8 py-4 rounded-2xl hover:bg-deepWarm transition-all duration-300 hover:scale-105 shadow-lg"
+              >
+                Hikâyemizi Keşfet
+              </button>
+            )}
+            
+            <p className="font-sans text-xs text-softGray mt-8">
+              🔒 Tüm veriler cihazında kalır
+            </p>
+          </div>
+        </div>
+      );
+    };
+
+    // ==================== NAVIGATION ====================
+    const Navigation = ({ activeTab, setActiveTab }) => {
+      const tabs = [
+        { id: 'dashboard', label: 'Genel Bakış', icon: '📊' },
+        { id: 'story', label: 'Hikâyemiz', icon: '📖' },
+        { id: 'search', label: 'Ara', icon: '🔍' },
+        { id: 'memory', label: 'Bir Anı', icon: '🎲' },
+        { id: 'playback', label: 'Zaman Yolculuğu', icon: '🎬' },
+        { id: 'insights', label: 'İçgörüler', icon: '💡' },
+        { id: 'milestones', label: 'Kilometre Taşları', icon: '🏆' },
+        { id: 'heatmap', label: 'Isı Haritası', icon: '🔥' },
+      ];
+      
+      return (
+        <nav className="sticky top-0 z-40 bg-warmWhite/95 backdrop-blur-sm border-b border-paleRose/30 shadow-sm">
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="flex items-center justify-between py-3">
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-2xl">❤️</span>
+                <span className="font-serif text-xl text-deepWarm hidden sm:block">Fırat & Nur</span>
+              </div>
+              <div className="flex gap-1 overflow-x-auto pb-1 ml-4">
+                {tabs.map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`font-sans text-sm px-3 py-2 rounded-xl whitespace-nowrap transition-all ${
+                      activeTab === tab.id 
+                        ? 'bg-softBrown text-warmWhite shadow-md' 
+                        : 'text-warmGray hover:bg-paleRose/30'
+                    }`}
+                  >
+                    <span className="mr-1">{tab.icon}</span>
+                    <span className="hidden md:inline">{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </nav>
+      );
+    };
+
+    // ==================== STAT CARD ====================
+    const StatCard = ({ icon, label, value, subtitle, delay = 0 }) => {
+      const [visible, setVisible] = useState(false);
+      useEffect(() => { setTimeout(() => setVisible(true), delay); }, [delay]);
+      
+      return (
+        <div className={`bg-warmWhite rounded-2xl p-5 shadow-md card-hover transition-all duration-500 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+          <div className="text-3xl mb-2">{icon}</div>
+          <div className="font-serif text-2xl md:text-3xl text-deepWarm mb-1">{value}</div>
+          <div className="font-sans text-softGray text-sm">{label}</div>
+          {subtitle && <div className="font-sans text-xs text-lightBrown mt-1">{subtitle}</div>}
+        </div>
+      );
+    };
+
+    // ==================== DASHBOARD ====================
+    const Dashboard = ({ stats, messages }) => {
+      const chartRef = useRef(null);
+      const hourChartRef = useRef(null);
+      const chartInstance = useRef(null);
+      const hourChartInstance = useRef(null);
+      
+      useEffect(() => {
+        if (chartRef.current && stats.monthlyData?.length) {
+          if (chartInstance.current) chartInstance.current.destroy();
+          
+          chartInstance.current = new Chart(chartRef.current.getContext('2d'), {
+            type: 'line',
+            data: {
+              labels: stats.monthlyData.map(d => d.month),
+              datasets: [{
+                label: 'Mesaj Sayısı',
+                data: stats.monthlyData.map(d => d.count),
+                borderColor: '#8B7355',
+                backgroundColor: 'rgba(139, 115, 85, 0.1)',
+                fill: true,
+                tension: 0.4,
+                pointBackgroundColor: '#C4A77D',
+                pointRadius: 3,
+                pointHoverRadius: 6
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { grid: { display: false }, ticks: { font: { family: 'DM Sans', size: 10 }, color: '#9A9A9A' } },
+                y: { grid: { color: 'rgba(196, 167, 125, 0.2)' }, ticks: { font: { family: 'DM Sans' }, color: '#9A9A9A' } }
+              }
+            }
+          });
+        }
+        return () => { if (chartInstance.current) chartInstance.current.destroy(); };
+      }, [stats.monthlyData]);
+      
+      useEffect(() => {
+        if (hourChartRef.current && stats.hourlyData?.length) {
+          if (hourChartInstance.current) hourChartInstance.current.destroy();
+          
+          hourChartInstance.current = new Chart(hourChartRef.current.getContext('2d'), {
+            type: 'bar',
+            data: {
+              labels: stats.hourlyData.map(d => `${d.hour}:00`),
+              datasets: [{
+                data: stats.hourlyData.map(d => d.count),
+                backgroundColor: stats.hourlyData.map(d => d.hour >= 23 || d.hour < 6 ? '#D4A5A5' : '#C4A77D'),
+                borderRadius: 4
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { grid: { display: false }, ticks: { font: { family: 'DM Sans', size: 9 }, color: '#9A9A9A' } },
+                y: { grid: { color: 'rgba(196, 167, 125, 0.2)' }, ticks: { font: { family: 'DM Sans' }, color: '#9A9A9A' } }
+              }
+            }
+          });
+        }
+        return () => { if (hourChartInstance.current) hourChartInstance.current.destroy(); };
+      }, [stats.hourlyData]);
+      
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard icon="💬" label="Toplam Mesaj" value={formatNumber(stats.totalMessages)} delay={0} />
+            <StatCard icon="📅" label="Birlikte Geçen Gün" value={formatNumber(stats.totalDays)} subtitle={`${formatDate(stats.firstDate)} - ${formatDate(stats.lastDate)}`} delay={100} />
+            <StatCard icon="🌙" label="Gece Sohbetleri" value={formatNumber(stats.nightMessages)} subtitle="23:00 - 06:00 arası" delay={200} />
+            <StatCard icon="📝" label="Ort. Mesaj Uzunluğu" value={`${stats.avgMessageLength} karakter`} delay={300} />
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="bg-warmWhite rounded-2xl p-6 shadow-md card-hover">
+              <h3 className="font-serif text-2xl text-deepWarm mb-4">Fırat</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between"><span className="font-sans text-softGray">Mesaj Sayısı</span><span className="font-sans text-deepWarm font-medium">{formatNumber(stats.firatMessages)}</span></div>
+                <div className="flex justify-between"><span className="font-sans text-softGray">Ort. Uzunluk</span><span className="font-sans text-deepWarm font-medium">{stats.firatAvgLength} karakter</span></div>
+                <div className="w-full bg-paleRose/30 rounded-full h-3">
+                  <div className="bg-softBrown rounded-full h-3 transition-all duration-1000" style={{ width: `${(stats.firatMessages / stats.totalMessages) * 100}%` }} />
+                </div>
+                <div className="text-right font-sans text-xs text-softGray">{((stats.firatMessages / stats.totalMessages) * 100).toFixed(1)}%</div>
+              </div>
+            </div>
+            
+            <div className="bg-warmWhite rounded-2xl p-6 shadow-md card-hover">
+              <h3 className="font-serif text-2xl text-deepWarm mb-4">Nur</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between"><span className="font-sans text-softGray">Mesaj Sayısı</span><span className="font-sans text-deepWarm font-medium">{formatNumber(stats.nurMessages)}</span></div>
+                <div className="flex justify-between"><span className="font-sans text-softGray">Ort. Uzunluk</span><span className="font-sans text-deepWarm font-medium">{stats.nurAvgLength} karakter</span></div>
+                <div className="w-full bg-paleRose/30 rounded-full h-3">
+                  <div className="bg-dustyRose rounded-full h-3 transition-all duration-1000" style={{ width: `${(stats.nurMessages / stats.totalMessages) * 100}%` }} />
+                </div>
+                <div className="text-right font-sans text-xs text-softGray">{((stats.nurMessages / stats.totalMessages) * 100).toFixed(1)}%</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="bg-warmWhite rounded-2xl p-6 shadow-md">
+              <h3 className="font-serif text-xl text-deepWarm mb-4">Aylık Mesaj Grafiği</h3>
+              <div className="h-64"><canvas ref={chartRef}></canvas></div>
+            </div>
+            <div className="bg-warmWhite rounded-2xl p-6 shadow-md">
+              <h3 className="font-serif text-xl text-deepWarm mb-4">Saatlik Aktivite</h3>
+              <p className="font-sans text-xs text-softGray mb-2">Pembe = Gece mesajları (23:00-06:00)</p>
+              <div className="h-56"><canvas ref={hourChartRef}></canvas></div>
+            </div>
+          </div>
+          
+          <div className="bg-warmWhite rounded-2xl p-6 shadow-md">
+            <h3 className="font-serif text-xl text-deepWarm mb-4">En Çok Kullanılan Kelimeler</h3>
+            <div className="flex flex-wrap gap-2 justify-center py-4">
+              {stats.topWords.slice(0, 40).map(([word, count], index) => {
+                const maxCount = stats.topWords[0]?.[1] || 1;
+                const size = Math.max(12, Math.min(32, 12 + (count / maxCount) * 20));
+                const opacity = 0.4 + (count / maxCount) * 0.6;
+                return (
+                  <span key={word} className="word-cloud-word font-serif" style={{ fontSize: `${size}px`, color: `rgba(139, 115, 85, ${opacity})` }}>
+                    {word}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+          
+          <div className="bg-warmWhite rounded-2xl p-6 shadow-md">
+            <h3 className="font-serif text-xl text-deepWarm mb-4">En Sevilen Emojiler</h3>
+            <div className="flex flex-wrap gap-4 justify-center">
+              {stats.topEmojis.slice(0, 15).map(([emoji, count], index) => (
+                <div key={index} className="text-center">
+                  <span className="text-3xl block mb-1">{emoji}</span>
+                  <span className="font-sans text-xs text-softGray">{formatNumber(count)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ==================== STORY MODE ====================
+    const StoryMode = ({ stats, messages }) => {
+      const [visibleSections, setVisibleSections] = useState([]);
+      
+      useEffect(() => {
+        const timer = setInterval(() => {
+          setVisibleSections(prev => {
+            if (prev.length < 10) return [...prev, prev.length];
+            clearInterval(timer);
+            return prev;
+          });
+        }, 500);
+        return () => clearInterval(timer);
+      }, []);
+      
+      const firstLove = messages.find(m => /seni seviyorum/i.test(m.text));
+      const firstCanim = messages.find(m => /canım/i.test(m.text));
+      
+      const sections = [
+        {
+          title: "Bir Bayram Mesajıyla Başladı",
+          content: `1 Nisan 2025, bir bayram sabahı. "Mutlu bayramlar..." yazdın. Nur "Tanıyamadım sizi" dedi. İki yabancıydınız. Ama evren başka bir plan yapmıştı...`
+        },
+        {
+          title: "Karakoyunlu Sokak Tesadüfü",
+          content: `Aynı sokakta yaşamışsınız! Fındıkzade, Karakoyunlu Sokak, BBS Bilgisayar, ikiz dayılar... Hayat bazen romanlardan daha güzel tesadüfler yazar.`
+        },
+        {
+          title: "${formatNumber(stats.totalMessages)} Mesaj",
+          content: `O günden bu yana ${formatNumber(stats.totalMessages)} mesaj paylaştınız. ${formatNumber(stats.totalDays)} gün boyunca, her gün ortalama ${Math.round(stats.totalMessages / stats.totalDays)} mesaj. Bu sadece bir sayı değil - ${formatNumber(stats.totalMessages)} kez birbirinize ulaştınız.`
+        },
+        {
+          title: "Gece Yarısı Sohbetleri",
+          content: `${formatNumber(stats.nightMessages)} mesajınız gece yarısından sonra. Mesajlarınızın %${((stats.nightMessages / stats.totalMessages) * 100).toFixed(1)}'i uykusuz gecelerde yazıldı. En derin sohbetler, en karanlık saatlerde yapılır...`
+        },
+        {
+          title: "Kim Daha Çok Konuşuyor?",
+          content: `Neredeyse mükemmel bir denge! Fırat ${formatNumber(stats.firatMessages)} mesaj (%${((stats.firatMessages / stats.totalMessages) * 100).toFixed(1)}), Nur ${formatNumber(stats.nurMessages)} mesaj (%${((stats.nurMessages / stats.totalMessages) * 100).toFixed(1)}). İletişimde denge, ilişkinin temelidir.`
+        },
+        {
+          title: "En Aktif Saatler",
+          content: `En çok saat ${stats.peakHour}:00 civarında konuşmuşsunuz. Bu saat artık resmi olmayan "sizin saatiniz".`
+        },
+        {
+          title: "Kelimeleriniz",
+          content: `En çok kullandığınız kelime "${stats.topWords[0]?.[0] || ''}" - tam ${formatNumber(stats.topWords[0]?.[1])} kez! Bu kelime, iletişiminizin ruhunu yansıtıyor.`
+        },
+        {
+          title: "İlk 'Canım'",
+          content: firstCanim 
+            ? `"Canım" kelimesi ilk kez ${formatDate(firstCanim.date)} tarihinde yazıldı. ${firstCanim.sender} bu sıcak kelimeyi ilk kullanan oldu.`
+            : `"Canım" - en sık kullandığınız hitap. Her seferinde bir parça sevgi.`
+        },
+        {
+          title: "Nora Kitap Evi",
+          content: `Mesajlarınızda geçen "dükkan", "cafe", "kitap"... Sadece bir iş değil, birlikte kurduğunuz bir hayal, bir yaşam.`
+        },
+        {
+          title: "Devam Eden Hikâye",
+          content: `Son mesaj ${formatDate(stats.lastDate)}. Ama bu hikâyenin sonu değil - sadece şimdilik yazılmış son satır. Daha yazılacak çok sayfa var...`
+        }
+      ];
+      
+      return (
+        <div className="max-w-3xl mx-auto space-y-6">
+          <div className="text-center mb-10">
+            <h2 className="font-serif text-3xl md:text-4xl text-deepWarm italic mb-3">Bizim Hikâyemiz</h2>
+            <p className="font-sans text-softGray">Mesajlardan oluşan bir aşk romanı</p>
+          </div>
+          
+          {sections.map((section, index) => (
+            <div 
+              key={index}
+              className={`bg-warmWhite rounded-2xl p-6 md:p-8 shadow-md transition-all duration-700 ${
+                visibleSections.includes(index) ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+              }`}
+            >
+              <h3 className="font-serif text-xl md:text-2xl text-softBrown mb-3">{section.title}</h3>
+              <p className="font-sans text-warmGray leading-relaxed">{section.content}</p>
+            </div>
+          ))}
+          
+          <div className={`text-center py-10 transition-all duration-700 ${visibleSections.length >= 10 ? 'opacity-100' : 'opacity-0'}`}>
+            <span className="text-5xl heartbeat">❤️</span>
+            <p className="font-serif text-xl md:text-2xl text-deepWarm italic mt-4">"Bu sadece bir analiz değil, bizim hikâyemiz."</p>
+          </div>
+        </div>
+      );
+    };
+
+    // ==================== SEARCH ====================
+    const Search = ({ messages }) => {
+      const [query, setQuery] = useState('');
+      const [dateFilter, setDateFilter] = useState('');
+      const [personFilter, setPersonFilter] = useState('all');
+      const [easterEggMessage, setEasterEggMessage] = useState(null);
+      
+      const filteredMessages = useMemo(() => {
+        return messages.filter(msg => {
+          const matchesQuery = query === '' || msg.text.toLowerCase().includes(query.toLowerCase());
+          const matchesDate = dateFilter === '' || msg.date === dateFilter;
+          const matchesPerson = personFilter === 'all' || msg.sender === personFilter;
+          return matchesQuery && matchesDate && matchesPerson;
+        }).slice(0, 200);
+      }, [messages, query, dateFilter, personFilter]);
+      
+      useEffect(() => {
+        if (query) {
+          const lowerQuery = query.toLowerCase();
+          for (const [keyword, message] of Object.entries(EASTER_EGGS)) {
+            if (lowerQuery.includes(keyword)) {
+              setEasterEggMessage(message);
+              return;
+            }
+          }
+        }
+        setEasterEggMessage(null);
+      }, [query]);
+      
+      return (
+        <div className="space-y-6">
+          <div className="bg-warmWhite rounded-2xl p-6 shadow-md">
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="font-sans text-sm text-softGray block mb-2">Kelime Ara</label>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Bir kelime veya cümle..."
+                  className="w-full font-sans px-4 py-3 rounded-xl border border-paleRose/50 focus:border-softBrown focus:outline-none bg-cream"
+                />
+              </div>
+              <div>
+                <label className="font-sans text-sm text-softGray block mb-2">Tarih</label>
+                <input
+                  type="date"
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="w-full font-sans px-4 py-3 rounded-xl border border-paleRose/50 focus:border-softBrown focus:outline-none bg-cream"
+                />
+              </div>
+              <div>
+                <label className="font-sans text-sm text-softGray block mb-2">Kişi</label>
+                <select
+                  value={personFilter}
+                  onChange={(e) => setPersonFilter(e.target.value)}
+                  className="w-full font-sans px-4 py-3 rounded-xl border border-paleRose/50 focus:border-softBrown focus:outline-none bg-cream"
+                >
+                  <option value="all">Herkes</option>
+                  <option value="Fırat">Fırat</option>
+                  <option value="Nur">Nur</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          
+          {easterEggMessage && (
+            <div className="bg-gradient-to-r from-paleRose to-dustyRose rounded-2xl p-6 shadow-lg fade-in">
+              <p className="font-serif text-xl text-deepWarm text-center">{easterEggMessage}</p>
+            </div>
+          )}
+          
+          <div className="font-sans text-sm text-softGray">{filteredMessages.length} sonuç {filteredMessages.length === 200 && '(ilk 200)'}</div>
+          
+          <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+            {filteredMessages.map((msg, index) => (
+              <div key={index} className={`bg-warmWhite rounded-2xl p-4 shadow-sm ${msg.sender === 'Fırat' ? 'mr-8' : 'ml-8'}`}>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-sans font-medium text-softBrown">{msg.sender}</span>
+                  <span className="font-sans text-xs text-softGray">{formatDate(msg.date)} {msg.time}</span>
+                </div>
+                <p className="font-sans text-warmGray whitespace-pre-wrap">{msg.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    // ==================== RANDOM MEMORY ====================
+    const RandomMemory = ({ messages }) => {
+      const [memory, setMemory] = useState(null);
+      const [isRevealing, setIsRevealing] = useState(false);
+      
+      const getRandomMemory = useCallback(() => {
+        setIsRevealing(true);
+        setTimeout(() => {
+          const startIdx = Math.floor(Math.random() * Math.max(1, messages.length - 10));
+          const conversation = messages.slice(startIdx, startIdx + Math.min(8, messages.length));
+          setMemory(conversation);
+          setIsRevealing(false);
+        }, 400);
+      }, [messages]);
+      
+      useEffect(() => { getRandomMemory(); }, []);
+      
+      return (
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="text-center mb-8">
+            <h2 className="font-serif text-3xl text-deepWarm mb-2">🎲 Rastgele Bir Anı</h2>
+            <p className="font-sans text-softGray">Geçmişten bir parça, şimdiye bir hediye</p>
+          </div>
+          
+          <button
+            onClick={getRandomMemory}
+            disabled={isRevealing}
+            className="w-full font-sans bg-softBrown text-warmWhite py-4 rounded-2xl hover:bg-deepWarm transition-all disabled:opacity-50 shadow-lg"
+          >
+            {isRevealing ? '✨ Anı bulunuyor...' : '🎲 Başka Bir Anı Göster'}
+          </button>
+          
+          {memory && (
+            <div className={`bg-warmWhite rounded-2xl p-6 shadow-lg transition-all duration-500 ${isRevealing ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
+              <div className="text-center mb-4">
+                <span className="font-serif text-sm text-lightBrown">{formatDate(memory[0]?.date)}</span>
+              </div>
+              <div className="space-y-3">
+                {memory.map((msg, index) => (
+                  <div key={index} className={`flex ${msg.sender === 'Fırat' ? 'justify-start' : 'justify-end'}`}>
+                    <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${msg.sender === 'Fırat' ? 'bg-paleRose/50 rounded-bl-none' : 'bg-lightBrown/20 rounded-br-none'}`}>
+                      <span className="font-sans text-xs text-softGray block mb-1">{msg.sender} · {msg.time}</span>
+                      <p className="font-sans text-warmGray text-sm whitespace-pre-wrap">{msg.text}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // ==================== PLAYBACK MODE ====================
+    const PlaybackMode = ({ messages }) => {
+      const [isPlaying, setIsPlaying] = useState(false);
+      const [currentIndex, setCurrentIndex] = useState(0);
+      const [speed, setSpeed] = useState(300);
+      const [visibleMessages, setVisibleMessages] = useState([]);
+      const containerRef = useRef(null);
+      
+      useEffect(() => {
+        let interval;
+        if (isPlaying && currentIndex < messages.length) {
+          interval = setInterval(() => {
+            setVisibleMessages(prev => [...prev.slice(-50), messages[currentIndex]]);
+            setCurrentIndex(prev => prev + 1);
+          }, speed);
+        }
+        return () => clearInterval(interval);
+      }, [isPlaying, currentIndex, messages, speed]);
+      
+      useEffect(() => {
+        if (containerRef.current) containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      }, [visibleMessages]);
+      
+      const reset = () => { setIsPlaying(false); setCurrentIndex(0); setVisibleMessages([]); };
+      const progress = (currentIndex / messages.length) * 100;
+      
+      return (
+        <div className="space-y-6">
+          <div className="text-center mb-8">
+            <h2 className="font-serif text-3xl text-deepWarm mb-2">🎬 Zaman Yolculuğu</h2>
+            <p className="font-sans text-softGray">Mesajlarınız animasyonlu olarak akıyor</p>
+          </div>
+          
+          <div className="bg-warmWhite rounded-2xl p-6 shadow-md">
+            <div className="flex flex-wrap gap-4 items-center justify-center mb-6">
+              <button onClick={() => setIsPlaying(!isPlaying)} className="font-sans bg-softBrown text-warmWhite px-6 py-3 rounded-xl hover:bg-deepWarm transition-all">
+                {isPlaying ? '⏸️ Duraklat' : '▶️ Başlat'}
+              </button>
+              <button onClick={reset} className="font-sans bg-paleRose text-deepWarm px-6 py-3 rounded-xl hover:bg-dustyRose transition-all">🔄 Sıfırla</button>
+              <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="font-sans px-4 py-3 rounded-xl border border-paleRose/50 bg-cream">
+                <option value={500}>Yavaş</option>
+                <option value={300}>Normal</option>
+                <option value={150}>Hızlı</option>
+                <option value={50}>Çok Hızlı</option>
+              </select>
+            </div>
+            
+            <div className="mb-4">
+              <div className="w-full bg-paleRose/30 rounded-full h-2">
+                <div className="bg-softBrown rounded-full h-2 transition-all" style={{ width: `${progress}%` }} />
+              </div>
+              <div className="flex justify-between mt-2">
+                <span className="font-sans text-xs text-softGray">{visibleMessages[0] ? formatDateShort(visibleMessages[0].date) : '-'}</span>
+                <span className="font-sans text-xs text-softGray">{formatNumber(currentIndex)} / {formatNumber(messages.length)}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div ref={containerRef} className="bg-warmWhite rounded-2xl p-4 shadow-md h-[450px] overflow-y-auto">
+            <div className="space-y-2">
+              {visibleMessages.map((msg, index) => (
+                <div key={index} className={`playback-message flex ${msg.sender === 'Fırat' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[80%] rounded-2xl px-3 py-2 ${msg.sender === 'Fırat' ? 'bg-paleRose/50 rounded-bl-none' : 'bg-lightBrown/20 rounded-br-none'}`}>
+                    <div className="flex justify-between items-center mb-1 gap-2">
+                      <span className="font-sans text-xs font-medium text-softBrown">{msg.sender}</span>
+                      <span className="font-sans text-xs text-softGray">{formatDateShort(msg.date)} {msg.time}</span>
+                    </div>
+                    <p className="font-sans text-warmGray text-sm whitespace-pre-wrap">{msg.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ==================== INSIGHTS ====================
+    const Insights = ({ stats, messages }) => {
+      const sentimentChartRef = useRef(null);
+      const sentimentChartInstance = useRef(null);
+      
+      const sentimentData = useMemo(() => {
+        const counts = { love: 0, humor: 0, tension: 0, deep: 0, neutral: 0 };
+        messages.forEach(msg => { counts[categorizeSentiment(msg.text)]++; });
+        return counts;
+      }, [messages]);
+      
+      useEffect(() => {
+        if (sentimentChartRef.current) {
+          if (sentimentChartInstance.current) sentimentChartInstance.current.destroy();
+          
+          sentimentChartInstance.current = new Chart(sentimentChartRef.current.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+              labels: ['❤️ Sevgi', '😂 Mizah', '😤 Gerilim', '🧠 Derin', '💬 Günlük'],
+              datasets: [{
+                data: [sentimentData.love, sentimentData.humor, sentimentData.tension, sentimentData.deep, sentimentData.neutral],
+                backgroundColor: ['#D4A5A5', '#C4A77D', '#8B7355', '#5C4B3A', '#E8D5D5'],
+                borderWidth: 0
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { position: 'bottom', labels: { font: { family: 'DM Sans' }, color: '#6B6B6B', padding: 15 } } }
+            }
+          });
+        }
+        return () => { if (sentimentChartInstance.current) sentimentChartInstance.current.destroy(); };
+      }, [sentimentData]);
+      
+      const insights = [
+        { icon: '⚖️', title: 'İletişim Dengesi', text: `Neredeyse mükemmel denge! Fırat %${((stats.firatMessages / stats.totalMessages) * 100).toFixed(1)}, Nur %${((stats.nurMessages / stats.totalMessages) * 100).toFixed(1)}. Sağlıklı bir iletişim göstergesi.` },
+        { icon: '📝', title: 'Mesaj Uzunluğu', text: stats.firatAvgLength > stats.nurAvgLength ? `Fırat ortalama ${stats.firatAvgLength} karakterle daha uzun mesajlar yazıyor.` : `Nur ortalama ${stats.nurAvgLength} karakterle daha uzun mesajlar yazıyor.` },
+        { icon: '🌙', title: 'Gece Kuşları', text: `Mesajlarınızın %${((stats.nightMessages / stats.totalMessages) * 100).toFixed(1)}'i gece yarısından sonra. Uykusuz geceler, derin sohbetler...` },
+        { icon: '⏰', title: 'Prime Time', text: `En yoğun konuşma saatiniz ${stats.peakHour}:00. Bu saat sizin için özel bir anlam taşıyor.` },
+        { icon: '❤️', title: 'Sevgi Dolu', text: `Mesajlarınızın %${((sentimentData.love / stats.totalMessages) * 100).toFixed(1)}'i sevgi içerikli. Aranızdaki bağ çok güçlü!` },
+        { icon: '📊', title: 'Günlük Ortalama', text: `Her gün ortalama ${Math.round(stats.totalMessages / stats.totalDays)} mesaj paylaşmışsınız. Bu yoğun bir iletişim!` },
+      ];
+      
+      return (
+        <div className="space-y-6">
+          <div className="text-center mb-8">
+            <h2 className="font-serif text-3xl text-deepWarm mb-2">💡 İlişki İçgörüleri</h2>
+            <p className="font-sans text-softGray">Verilerinizin anlattığı hikâye</p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="bg-warmWhite rounded-2xl p-6 shadow-md">
+              <h3 className="font-serif text-xl text-deepWarm mb-4">Duygu Analizi</h3>
+              <div className="h-64"><canvas ref={sentimentChartRef}></canvas></div>
+            </div>
+            
+            <div className="space-y-4">
+              {insights.slice(0, 3).map((insight, index) => (
+                <div key={index} className="bg-warmWhite rounded-2xl p-5 shadow-md card-hover">
+                  <div className="flex items-start gap-4">
+                    <span className="text-2xl">{insight.icon}</span>
+                    <div>
+                      <h4 className="font-serif text-lg text-softBrown mb-1">{insight.title}</h4>
+                      <p className="font-sans text-warmGray text-sm">{insight.text}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-4">
+            {insights.slice(3).map((insight, index) => (
+              <div key={index} className="bg-warmWhite rounded-2xl p-5 shadow-md card-hover">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">{insight.icon}</span>
+                  <div>
+                    <h4 className="font-serif text-base text-softBrown mb-1">{insight.title}</h4>
+                    <p className="font-sans text-warmGray text-sm">{insight.text}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    // ==================== MILESTONES ====================
+    const Milestones = ({ messages, stats }) => {
+      const milestones = useMemo(() => {
+        const results = [];
+        
+        if (messages.length > 0) {
+          results.push({ date: messages[0].date, title: 'İlk Mesaj', description: `"${messages[0].text.slice(0, 60)}${messages[0].text.length > 60 ? '...' : ''}"`, icon: '🎬', sender: messages[0].sender });
+        }
+        
+        const firstCanim = messages.find(m => /canım/i.test(m.text));
+        if (firstCanim) results.push({ date: firstCanim.date, title: 'İlk "Canım"', description: `${firstCanim.sender} ilk "canım" dedi`, icon: '💕', sender: firstCanim.sender });
+        
+        const firstLove = messages.find(m => /seni seviyorum/i.test(m.text));
+        if (firstLove) results.push({ date: firstLove.date, title: 'İlk "Seni Seviyorum"', description: `${firstLove.sender} bu kelimeleri ilk söyledi`, icon: '❤️', sender: firstLove.sender });
+        
+        const firstOzledim = messages.find(m => /özledim/i.test(m.text));
+        if (firstOzledim) results.push({ date: firstOzledim.date, title: 'İlk "Özledim"', description: `${firstOzledim.sender} özlemini dile getirdi`, icon: '🥺', sender: firstOzledim.sender });
+        
+        const firstEmoji = messages.find(m => extractEmojis(m.text).length > 0);
+        if (firstEmoji) {
+          const emoji = extractEmojis(firstEmoji.text)[0];
+          results.push({ date: firstEmoji.date, title: 'İlk Emoji', description: `${firstEmoji.sender}: ${emoji}`, icon: emoji, sender: firstEmoji.sender });
+        }
+        
+        [1000, 5000, 10000, 20000, 30000, 40000].forEach(n => {
+          if (messages.length >= n) {
+            results.push({ date: messages[n-1].date, title: `${formatNumber(n)}. Mesaj`, description: `${formatNumber(n)} mesaj biriktirdiniz!`, icon: '🎉', sender: messages[n-1].sender });
+          }
+        });
+        
+        return results.sort((a, b) => new Date(a.date) - new Date(b.date));
+      }, [messages]);
+      
+      const superlatives = useMemo(() => {
+        const results = [];
+        
+        const longestMsg = messages.reduce((prev, curr) => curr.text.length > prev.text.length ? curr : prev, messages[0]);
+        if (longestMsg) results.push({ icon: '📜', title: 'En Uzun Mesaj', value: `${longestMsg.text.length} karakter`, detail: `${longestMsg.sender} - "${longestMsg.text.slice(0, 50)}..."` });
+        
+        const dailyCounts = {};
+        messages.forEach(m => { dailyCounts[m.date] = (dailyCounts[m.date] || 0) + 1; });
+        const peakDay = Object.entries(dailyCounts).reduce((prev, curr) => curr[1] > prev[1] ? curr : prev, ['', 0]);
+        results.push({ icon: '🔥', title: 'En Yoğun Gün', value: formatDate(peakDay[0]), detail: `${formatNumber(peakDay[1])} mesaj!` });
+        
+        return results;
+      }, [messages]);
+      
+      return (
+        <div className="space-y-8">
+          <div className="text-center mb-8">
+            <h2 className="font-serif text-3xl text-deepWarm mb-2">🏆 Kilometre Taşları</h2>
+            <p className="font-sans text-softGray">İlişkinizin önemli anları</p>
+          </div>
+          
+          <div className="relative max-w-2xl mx-auto">
+            <div className="absolute left-4 md:left-1/2 md:transform md:-translate-x-1/2 w-1 h-full timeline-line rounded-full" />
+            
+            <div className="space-y-6">
+              {milestones.map((milestone, index) => (
+                <div key={index} className={`flex items-center gap-4 md:gap-8 ${index % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'}`}>
+                  <div className={`flex-1 ml-8 md:ml-0 ${index % 2 === 0 ? 'md:text-right' : 'md:text-left'}`}>
+                    <div className="bg-warmWhite rounded-2xl p-4 shadow-md card-hover inline-block max-w-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xl">{milestone.icon}</span>
+                        <div>
+                          <h3 className="font-serif text-base text-softBrown">{milestone.title}</h3>
+                          <span className="font-sans text-xs text-softGray">{formatDate(milestone.date)}</span>
+                        </div>
+                      </div>
+                      <p className="font-sans text-warmGray text-sm">{milestone.description}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="absolute left-4 md:left-1/2 md:transform md:-translate-x-1/2 w-3 h-3 bg-softBrown rounded-full z-10" />
+                  
+                  <div className="flex-1 hidden md:block" />
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="mt-12">
+            <h3 className="font-serif text-2xl text-deepWarm text-center mb-6">🥇 En'ler</h3>
+            <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+              {superlatives.map((item, index) => (
+                <div key={index} className="bg-warmWhite rounded-2xl p-6 shadow-md card-hover">
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl">{item.icon}</span>
+                    <div>
+                      <h4 className="font-serif text-lg text-softBrown">{item.title}</h4>
+                      <p className="font-sans text-deepWarm font-medium">{item.value}</p>
+                      <p className="font-sans text-sm text-softGray">{item.detail}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ==================== HEATMAP ====================
+    const Heatmap = ({ messages }) => {
+      const { heatmapData, maxCount, monthLabels } = useMemo(() => {
+        const dailyCounts = {};
+        messages.forEach(m => { dailyCounts[m.date] = (dailyCounts[m.date] || 0) + 1; });
+        
+        const dates = Object.keys(dailyCounts).sort();
+        if (dates.length === 0) return { heatmapData: [], maxCount: 0, monthLabels: [] };
+        
+        const startDate = new Date(dates[0]);
+        const endDate = new Date(dates[dates.length - 1]);
+        
+        const weeks = [];
+        const months = [];
+        let currentDate = new Date(startDate);
+        currentDate.setDate(currentDate.getDate() - currentDate.getDay());
+        
+        let lastMonth = -1;
+        while (currentDate <= endDate) {
+          const week = [];
+          for (let i = 0; i < 7; i++) {
+            const dateStr = currentDate.toISOString().split('T')[0];
+            week.push({ date: dateStr, count: dailyCounts[dateStr] || 0 });
+            
+            if (currentDate.getMonth() !== lastMonth && i === 0) {
+              months.push({ weekIndex: weeks.length, month: currentDate.toLocaleDateString('tr-TR', { month: 'short' }) });
+              lastMonth = currentDate.getMonth();
+            }
+            
+            currentDate.setDate(currentDate.getDate() + 1);
+          }
+          weeks.push(week);
+        }
+        
+        const max = Math.max(...Object.values(dailyCounts));
+        return { heatmapData: weeks, maxCount: max, monthLabels: months };
+      }, [messages]);
+      
+      const getColor = (count) => {
+        if (count === 0) return '#F5F0E8';
+        const intensity = count / maxCount;
+        if (intensity < 0.2) return '#E8D5D5';
+        if (intensity < 0.4) return '#D4A5A5';
+        if (intensity < 0.6) return '#C4A77D';
+        if (intensity < 0.8) return '#8B7355';
+        return '#5C4B3A';
+      };
+      
+      const dayLabels = ['P', 'S', 'Ç', 'P', 'C', 'C', 'P'];
+      
+      return (
+        <div className="space-y-6">
+          <div className="text-center mb-8">
+            <h2 className="font-serif text-3xl text-deepWarm mb-2">🔥 Mesaj Isı Haritası</h2>
+            <p className="font-sans text-softGray">Günlük mesaj yoğunluğu</p>
+          </div>
+          
+          <div className="bg-warmWhite rounded-2xl p-6 shadow-md overflow-x-auto">
+            <div className="min-w-max">
+              {/* Month labels */}
+              <div className="flex ml-6 mb-1">
+                {monthLabels.map((m, i) => (
+                  <div key={i} className="font-sans text-xs text-softGray" style={{ marginLeft: i === 0 ? `${m.weekIndex * 14}px` : `${(m.weekIndex - (monthLabels[i-1]?.weekIndex || 0)) * 14 - 20}px` }}>
+                    {m.month}
+                  </div>
+                ))}
+              </div>
+              
+              <div className="flex gap-0.5">
+                <div className="flex flex-col gap-0.5 mr-1">
+                  {dayLabels.map((day, i) => (
+                    <div key={i} className="h-3 w-4 font-sans text-xs text-softGray flex items-center justify-end pr-1">
+                      {i % 2 === 1 ? day : ''}
+                    </div>
+                  ))}
+                </div>
+                
+                {heatmapData.map((week, weekIndex) => (
+                  <div key={weekIndex} className="flex flex-col gap-0.5">
+                    {week.map((day, dayIndex) => (
+                      <div
+                        key={dayIndex}
+                        className="w-3 h-3 rounded-sm heatmap-cell cursor-pointer"
+                        style={{ backgroundColor: getColor(day.count) }}
+                        title={`${formatDate(day.date)}: ${day.count} mesaj`}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+              
+              <div className="flex items-center justify-end gap-1 mt-4">
+                <span className="font-sans text-xs text-softGray mr-1">Az</span>
+                {['#F5F0E8', '#E8D5D5', '#D4A5A5', '#C4A77D', '#8B7355', '#5C4B3A'].map((color, i) => (
+                  <div key={i} className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+                ))}
+                <span className="font-sans text-xs text-softGray ml-1">Çok</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ==================== FINAL SCREEN ====================
+    const FinalScreen = ({ onBack }) => (
+      <div className="fixed inset-0 bg-cream flex items-center justify-center z-50 p-4">
+        <div className="text-center max-w-2xl">
+          <div className="mb-8"><span className="text-7xl heartbeat">❤️</span></div>
+          <h1 className="font-serif text-3xl md:text-5xl text-deepWarm mb-6 italic">"Bu sadece bir analiz değil, bizim hikâyemiz."</h1>
+          <p className="font-sans text-warmGray text-lg leading-relaxed mb-8">
+            41.693 mesajda saklı bir aşk hikâyesi. Bir bayram mesajıyla başlayan, Karakoyunlu Sokak'ta kesişen, Nora'da buluşan yolculuk.
+            Her mesajda bir parça biz var. Her kelimede bir anı gizli.
+          </p>
+          <p className="font-serif text-xl text-softBrown italic mb-4">Nur'a, hayatıma anlam katan insana...</p>
+          <p className="font-sans text-sm text-softGray mb-8">Sevgiyle, Fırat 💕</p>
+          <button onClick={onBack} className="font-sans text-softBrown hover:text-deepWarm transition-colors">← Geri Dön</button>
+        </div>
+      </div>
+    );
+
+    // ==================== MAIN APP ====================
+    const App = () => {
+      const [showWelcome, setShowWelcome] = useState(true);
+      const [showFinal, setShowFinal] = useState(false);
+      const [activeTab, setActiveTab] = useState('dashboard');
+      const [messages, setMessages] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      
+      useEffect(() => {
+        fetch('messages.json')
+          .then(res => {
+            if (!res.ok) throw new Error('Dosya bulunamadı');
+            return res.json();
+          })
+          .then(data => { setMessages(data); setLoading(false); })
+          .catch(err => { setError(err.message); setLoading(false); });
+      }, []);
+      
+      const stats = useMemo(() => {
+        if (!messages.length) return {};
+        
+        const firatMsgs = messages.filter(m => m.sender === 'Fırat');
+        const nurMsgs = messages.filter(m => m.sender === 'Nur');
+        
+        const dates = [...new Set(messages.map(m => m.date))].sort();
+        const firstDate = dates[0];
+        const lastDate = dates[dates.length - 1];
+        const totalDays = Math.ceil((new Date(lastDate) - new Date(firstDate)) / (1000 * 60 * 60 * 24)) + 1;
+        
+        const nightMsgs = messages.filter(m => isNightMessage(m.time));
+        
+        const avgLength = Math.round(messages.reduce((sum, m) => sum + m.text.length, 0) / messages.length);
+        const firatAvgLength = Math.round(firatMsgs.reduce((sum, m) => sum + m.text.length, 0) / firatMsgs.length);
+        const nurAvgLength = Math.round(nurMsgs.reduce((sum, m) => sum + m.text.length, 0) / nurMsgs.length);
+        
+        const monthlyMap = {};
+        messages.forEach(m => {
+          const month = m.date.slice(0, 7);
+          monthlyMap[month] = (monthlyMap[month] || 0) + 1;
+        });
+        const monthlyData = Object.entries(monthlyMap).sort((a, b) => a[0].localeCompare(b[0])).map(([month, count]) => {
+          const [y, m] = month.split('-');
+          const monthNames = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+          return { month: `${monthNames[parseInt(m) - 1]} ${y.slice(2)}`, count };
+        });
+        
+        const hourlyMap = {};
+        for (let i = 0; i < 24; i++) hourlyMap[i] = 0;
+        messages.forEach(m => { if (m.time) hourlyMap[parseInt(m.time.split(':')[0])]++; });
+        const hourlyData = Object.entries(hourlyMap).map(([hour, count]) => ({ hour: parseInt(hour), count }));
+        
+        const peakHour = hourlyData.reduce((prev, curr) => curr.count > prev.count ? curr : prev).hour;
+        
+        return {
+          totalMessages: messages.length,
+          totalDays,
+          firstDate,
+          lastDate,
+          nightMessages: nightMsgs.length,
+          avgMessageLength: avgLength,
+          firatMessages: firatMsgs.length,
+          nurMessages: nurMsgs.length,
+          firatAvgLength,
+          nurAvgLength,
+          monthlyData,
+          hourlyData,
+          peakHour,
+          topWords: getWordFrequency(messages),
+          topEmojis: getEmojiFrequency(messages)
+        };
+      }, [messages]);
+      
+      if (showWelcome) {
+        return <WelcomeScreen onStart={() => setShowWelcome(false)} loading={loading} error={error} />;
+      }
+      
+      if (showFinal) {
+        return <FinalScreen onBack={() => setShowFinal(false)} />;
+      }
+      
+      return (
+        <div className="min-h-screen pb-20">
+          <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
+          
+          <main className="max-w-7xl mx-auto px-4 py-6">
+            {activeTab === 'dashboard' && <Dashboard stats={stats} messages={messages} />}
+            {activeTab === 'story' && <StoryMode stats={stats} messages={messages} />}
+            {activeTab === 'search' && <Search messages={messages} />}
+            {activeTab === 'memory' && <RandomMemory messages={messages} />}
+            {activeTab === 'playback' && <PlaybackMode messages={messages} />}
+            {activeTab === 'insights' && <Insights stats={stats} messages={messages} />}
+            {activeTab === 'milestones' && <Milestones messages={messages} stats={stats} />}
+            {activeTab === 'heatmap' && <Heatmap messages={messages} />}
+          </main>
+          
+          <footer className="fixed bottom-0 left-0 right-0 bg-warmWhite/95 backdrop-blur-sm border-t border-paleRose/30 py-3 px-4">
+            <div className="max-w-7xl mx-auto flex justify-between items-center">
+              <span className="font-sans text-xs text-softGray">🔒 Tüm veriler cihazında kalır</span>
+              <button onClick={() => setShowFinal(true)} className="font-sans text-xs text-softBrown hover:text-deepWarm transition-colors">
+                Hikâyeyi Bitir ❤️
+              </button>
+            </div>
+          </footer>
+        </div>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
