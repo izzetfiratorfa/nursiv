@@ -957,49 +957,95 @@
     const PlaybackMode = ({ messages }) => {
       const [isPlaying, setIsPlaying] = useState(false);
       const [currentIndex, setCurrentIndex] = useState(0);
-      const [speed, setSpeed] = useState(200);
       const [visibleMessages, setVisibleMessages] = useState([]);
+      const [currentlyTyping, setCurrentlyTyping] = useState(null);
+      const [displayedText, setDisplayedText] = useState('');
       const containerRef = useRef(null);
+      const typingSpeed = 25; // ms per character
+      
+      // Typewriter effect for current message
+      useEffect(() => {
+        if (!currentlyTyping) return;
+        
+        const fullText = currentlyTyping.text;
+        let charIndex = 0;
+        
+        const typeInterval = setInterval(() => {
+          if (charIndex <= fullText.length) {
+            setDisplayedText(fullText.slice(0, charIndex));
+            charIndex++;
+          } else {
+            clearInterval(typeInterval);
+            // Message fully typed, add to visible and move to next
+            setVisibleMessages(prev => [...prev.slice(-30), { ...currentlyTyping, fullyTyped: true }]);
+            setCurrentlyTyping(null);
+            setDisplayedText('');
+          }
+        }, typingSpeed);
+        
+        return () => clearInterval(typeInterval);
+      }, [currentlyTyping]);
+      
+      // Move to next message when current one finishes
+      useEffect(() => {
+        if (!isPlaying || currentlyTyping || currentIndex >= messages.length) return;
+        
+        // Small delay between messages
+        const delay = setTimeout(() => {
+          setCurrentlyTyping(messages[currentIndex]);
+          setCurrentIndex(prev => prev + 1);
+        }, 300);
+        
+        return () => clearTimeout(delay);
+      }, [isPlaying, currentlyTyping, currentIndex, messages]);
       
       useEffect(() => {
-        let interval;
-        if (isPlaying && currentIndex < messages.length) {
-          interval = setInterval(() => {
-            setVisibleMessages(prev => [...prev.slice(-40), messages[currentIndex]]);
-            setCurrentIndex(prev => prev + 1);
-          }, speed);
+        if (containerRef.current) {
+          containerRef.current.scrollTop = containerRef.current.scrollHeight;
         }
-        return () => clearInterval(interval);
-      }, [isPlaying, currentIndex, messages, speed]);
+      }, [visibleMessages, displayedText]);
       
-      useEffect(() => {
-        if (containerRef.current) containerRef.current.scrollTop = containerRef.current.scrollHeight;
-      }, [visibleMessages]);
+      const reset = () => { 
+        setIsPlaying(false); 
+        setCurrentIndex(0); 
+        setVisibleMessages([]); 
+        setCurrentlyTyping(null);
+        setDisplayedText('');
+      };
       
-      const reset = () => { setIsPlaying(false); setCurrentIndex(0); setVisibleMessages([]); };
+      const togglePlay = () => {
+        setIsPlaying(!isPlaying);
+      };
+      
+      const skipCurrent = () => {
+        if (currentlyTyping) {
+          setVisibleMessages(prev => [...prev.slice(-30), { ...currentlyTyping, fullyTyped: true }]);
+          setCurrentlyTyping(null);
+          setDisplayedText('');
+        }
+      };
+      
       const progress = (currentIndex / messages.length) * 100;
       
       return (
         <div className="space-y-6">
           <div className="text-center mb-8">
-            <p className="font-mono text-xs text-accent mb-2">&gt; playback.start()</p>
+            <p className="font-mono text-xs text-accent mb-2">&gt; playback.typewriter()</p>
             <h2 className="font-serif text-3xl text-cream">Zaman Yolculuğu</h2>
+            <p className="font-mono text-xs text-textMuted mt-2">// mesajlar yazıldığı gibi akıyor</p>
           </div>
           
           <div className="card-dark rounded-none p-6">
             <div className="flex flex-wrap gap-4 items-center justify-center mb-6">
-              <button onClick={() => setIsPlaying(!isPlaying)} className="btn-click font-mono bg-accent text-dark px-6 py-3 hover:bg-cream transition-all">
+              <button onClick={togglePlay} className="btn-click font-mono bg-accent text-dark px-6 py-3 hover:bg-cream transition-all">
                 {isPlaying ? '[ DURAKLAT ]' : '[ BAŞLAT ]'}
+              </button>
+              <button onClick={skipCurrent} disabled={!currentlyTyping} className="btn-click font-mono border border-textMuted text-textMuted px-6 py-3 hover:border-accent hover:text-accent transition-all disabled:opacity-30">
+                [ ATLA ]
               </button>
               <button onClick={reset} className="btn-click font-mono border border-textMuted text-textMuted px-6 py-3 hover:border-accent hover:text-accent transition-all">
                 [ SIFIRLA ]
               </button>
-              <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="font-mono text-sm px-4 py-3 bg-mutedGray border border-softGray text-cream">
-                <option value={400}>yavaş</option>
-                <option value={200}>normal</option>
-                <option value={100}>hızlı</option>
-                <option value={30}>çok hızlı</option>
-              </select>
             </div>
             
             <div className="mb-4">
@@ -1007,26 +1053,61 @@
                 <div className="bg-accent h-1 transition-all" style={{ width: `${progress}%` }} />
               </div>
               <div className="flex justify-between mt-2">
-                <span className="font-mono text-xs text-textMuted">{visibleMessages[0] ? formatDateShort(visibleMessages[0].date) : '...'}</span>
-                <span className="font-mono text-xs text-accent">{formatNumber(currentIndex)} / {formatNumber(messages.length)}</span>
+                <span className="font-mono text-xs text-textMuted">
+                  {visibleMessages[0] ? formatDateShort(visibleMessages[0].date) : '...'}
+                </span>
+                <span className="font-mono text-xs text-accent">
+                  {formatNumber(currentIndex)} / {formatNumber(messages.length)}
+                </span>
               </div>
             </div>
+            
+            {currentlyTyping && (
+              <div className="text-center">
+                <span className="font-mono text-xs text-glitch1 animate-pulse">
+                  ● {currentlyTyping.sender} yazıyor...
+                </span>
+              </div>
+            )}
           </div>
           
-          <div ref={containerRef} className="card-dark rounded-none p-4 h-[450px] overflow-y-auto">
-            <div className="space-y-2">
+          <div ref={containerRef} className="card-dark rounded-none p-4 h-[500px] overflow-y-auto">
+            <div className="space-y-3">
+              {/* Already typed messages */}
               {visibleMessages.map((msg, index) => (
                 <div key={index} className={`msg-slide flex ${msg.sender === 'Fırat' ? 'justify-start' : 'justify-end'}`}>
-                  <div className={`max-w-[80%] p-2 ${msg.sender === 'Fırat' ? 'bg-mutedGray border-l border-l-accent' : 'bg-softGray border-r border-r-glitch1'}`}>
-                    <div className="flex justify-between items-center mb-1 gap-2">
+                  <div className={`max-w-[80%] p-3 ${msg.sender === 'Fırat' ? 'bg-mutedGray border-l-2 border-l-accent' : 'bg-softGray border-r-2 border-r-glitch1'}`}>
+                    <div className="flex justify-between items-center mb-2 gap-3">
                       <span className="font-mono text-xs text-accent">{msg.sender}</span>
                       <span className="font-mono text-xs text-textMuted">{formatDateShort(msg.date)} {msg.time}</span>
                     </div>
-                    <p className="font-serif text-cream text-sm whitespace-pre-wrap">{msg.text}</p>
+                    <p className="font-serif text-cream text-sm whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                   </div>
                 </div>
               ))}
+              
+              {/* Currently typing message */}
+              {currentlyTyping && (
+                <div className={`flex ${currentlyTyping.sender === 'Fırat' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[80%] p-3 ${currentlyTyping.sender === 'Fırat' ? 'bg-mutedGray border-l-2 border-l-accent' : 'bg-softGray border-r-2 border-r-glitch1'}`}>
+                    <div className="flex justify-between items-center mb-2 gap-3">
+                      <span className="font-mono text-xs text-accent">{currentlyTyping.sender}</span>
+                      <span className="font-mono text-xs text-textMuted">{formatDateShort(currentlyTyping.date)} {currentlyTyping.time}</span>
+                    </div>
+                    <p className="font-serif text-cream text-sm whitespace-pre-wrap leading-relaxed">
+                      {displayedText}
+                      <span className="inline-block w-0.5 h-4 bg-accent ml-0.5 animate-pulse"></span>
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
+          </div>
+          
+          <div className="card-dark rounded-none p-4 border-l-4 border-l-accent">
+            <p className="font-serif text-sm text-textLight italic">
+              💡 Her mesaj, karakter sayısına göre yazılıyor. Uzun mesajlar daha uzun sürüyor — tıpkı gerçekte olduğu gibi.
+            </p>
           </div>
         </div>
       );
