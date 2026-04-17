@@ -1,0 +1,10 @@
+{
+  "name": "nur:şiv - Bizim Arşivimiz",
+  "short_name": "nur:şiv",
+  "description": "41.693 mesajda saklı bir hikâye",
+  "start_url": "nur-siv.html",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#c9a86c",
+  "icons": []
+}
