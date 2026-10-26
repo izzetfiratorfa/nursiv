@@ -1,10 +1,25 @@
 {
-  "name": "nur:şiv - Bizim Arşivimiz",
-  "short_name": "nur:şiv",
-  "description": "41.693 mesajda saklı bir hikâye",
-  "start_url": "nur-siv.html",
+  "name": "Fırat & Nur Hayat Arşivi",
+  "short_name": "Hayat Arşivi",
+  "description": "Fırat & Nur — Her anın kaydı",
+  "start_url": "/nursiv/",
+  "scope": "/nursiv/",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#c9a86c",
-  "icons": []
+  "orientation": "portrait",
+  "background_color": "#151210",
+  "theme_color": "#151210",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
 }
